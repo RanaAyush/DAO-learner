@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { learnerAuth } from "../middleware";
-import { client } from "@repo/db/client";
+import { PrismaClient } from "@prisma/client";
+import { web3Service } from "../services/web3Service";
+
+const client = new PrismaClient();
 
 const router: Router = Router();
 
@@ -185,6 +188,9 @@ router.put("/enrollment/:id/progress", learnerAuth, async (req: Request, res: Re
             where: {
                 id,
                 learnerId: req.user.id
+            },
+            include: {
+                roadmap: true
             }
         });
         
@@ -202,6 +208,83 @@ router.put("/enrollment/:id/progress", learnerAuth, async (req: Request, res: Re
     } catch (error) {
         console.error("Error updating progress:", error);
         res.status(500).json({ error: "Failed to update progress" });
+    }
+});
+
+// Claim a completion certificate NFT
+//@ts-ignore
+router.post("/roadmap/:id/claim-certificate", learnerAuth, async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params; // roadmapId
+        
+        // Get the enrollment to check progress
+        const enrollment = await client.enrollment.findFirst({
+            where: {
+                roadmapId: id,
+                learnerId: req.user.id
+            }
+        });
+        
+        // Check if learner is enrolled and has 100% progress
+        if (!enrollment) {
+            return res.status(404).json({ error: "You are not enrolled in this roadmap" });
+        }
+        
+        if (enrollment.progress < 100) {
+            return res.status(400).json({ 
+                error: "You must complete 100% of the roadmap to claim a certificate",
+                currentProgress: enrollment.progress
+            });
+        }
+        
+        // Get learner's wallet address
+        const learner = await client.user.findUnique({
+            where: { id: req.user.id },
+            select: { walletAddress: true }
+        });
+        
+        if (!learner || !learner.walletAddress) {
+            return res.status(400).json({ error: "No wallet address found for your account" });
+        }
+        
+        // Check if learner already has a certificate for this roadmap
+        const alreadyCompleted = await web3Service.hasCompletedRoadmap(
+            learner.walletAddress as string,
+            id
+        );
+        
+        if (alreadyCompleted) {
+            return res.status(400).json({ error: "You have already claimed a certificate for this roadmap" });
+        }
+        
+        // Mint NFT certificate
+        try {
+            const txHash = await web3Service.mintCompletionCertificate(
+                learner.walletAddress as string,
+                id
+            );
+            
+            if (txHash) {
+                console.log(`Completion certificate NFT minted for roadmap ${id} by learner ${req.user.id}`);
+                
+                // You could store the certificate info in your database
+                // For example, create a new model for certificates
+                
+                return res.status(200).json({
+                    message: "Certificate claimed successfully",
+                    txHash: txHash,
+                    roadmapId: id
+                });
+            } else {
+                return res.status(500).json({ error: "Failed to mint certificate NFT" });
+            }
+        } catch (nftError) {
+            console.error("Error minting certificate NFT:", nftError);
+            return res.status(500).json({ error: "Error creating certificate" });
+        }
+    } catch (error) {
+        console.error("Error claiming certificate:", error);
+        res.status(500).json({ error: "Failed to claim certificate" });
     }
 });
 

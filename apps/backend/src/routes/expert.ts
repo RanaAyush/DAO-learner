@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { expertAuth } from "../middleware";
-import { client } from "@repo/db/client";
+import { PrismaClient } from "@prisma/client";
+import { web3Service } from "../services/web3Service";
+
+const client = new PrismaClient();
 
 const router: Router = Router();
 
@@ -9,6 +12,8 @@ const router: Router = Router();
 router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
     try {
         const { title, description } = req.body;
+        // Get wallet address from authorization header
+        const walletAddress = req.headers['authorization']?.split(' ')[1];
         
         // Validate required fields
         if (!title || !description) {
@@ -24,6 +29,43 @@ router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
             }
         });
         
+        // Get expert's wallet address from the database
+        const expert = await client.user.findUnique({
+            where: { id: req.user.id },
+            select: { walletAddress: true }
+        });
+        
+        if (expert && expert.walletAddress) {
+            try {
+                // Mint NFT for the expert
+                const txHash = await web3Service.mintRoadmapNFT(
+                    expert.walletAddress,
+                    roadmap.id
+                );
+                
+                if (txHash) {
+                    console.log(`NFT minted successfully for roadmap ${roadmap.id}`);
+                    // Could store txHash in the database if needed
+                    // await client.roadmap.update({
+                    //     where: { id: roadmap.id },
+                    //     data: { nftTxHash: txHash }
+                    // });
+                    
+                    // Return the roadmap with the transaction hash
+                    return res.status(201).json({
+                        ...roadmap,
+                        nftTxHash: txHash
+                    });
+                }
+            } catch (nftError) {
+                // Log NFT minting error but don't fail the request
+                console.error("Error minting NFT:", nftError);
+                // We'll still return success for the roadmap creation
+            }
+        }
+        
+        // If we reach here, either there was no wallet address or NFT minting failed
+        // but we still created the roadmap successfully
         res.status(201).json(roadmap);
     } catch (error) {
         console.error("Error creating roadmap:", error);
@@ -35,6 +77,7 @@ router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
 //@ts-ignore
 router.get("/roadmaps", expertAuth, async (req: Request, res: Response) => {
     try {
+        console.log("1");
         const roadmaps = await client.roadmap.findMany({
             where: {
                 expertId: req.user.id
@@ -51,6 +94,7 @@ router.get("/roadmaps", expertAuth, async (req: Request, res: Response) => {
                 createdAt: 'desc'
             }
         });
+        console.log("2");
         
         res.status(200).json(roadmaps);
     } catch (error) {
