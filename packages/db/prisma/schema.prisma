@@ -1,0 +1,80 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  walletAddress String    @unique
+  isExpert      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  roadmaps      Roadmap[] // If user is expert
+  enrollments   Enrollment[] // If user is learner
+}
+
+model Roadmap {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  expertId    String
+  expert      User      @relation(fields: [expertId], references: [id])
+  steps       Step[]
+  enrollments Enrollment[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Step {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  order       Int
+  resources   Resource[]
+  roadmapId   String
+  roadmap     Roadmap   @relation(fields: [roadmapId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Resource {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  type        ResourceType
+  url         String
+  stepId      String
+  step        Step      @relation(fields: [stepId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Enrollment {
+  id          String    @id @default(cuid())
+  learnerId   String
+  learner     User      @relation(fields: [learnerId], references: [id])
+  roadmapId   String
+  roadmap     Roadmap   @relation(fields: [roadmapId], references: [id])
+  progress    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum ResourceType {
+  VIDEO
+  ARTICLE
+  COURSE
+  PROJECT
+  DOCUMENTATION
+  OTHER
+}
