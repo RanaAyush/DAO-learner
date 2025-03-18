@@ -36,7 +36,7 @@ export function useRoadmaps() {
       const walletAddress = address;
       
       // Call the expert API endpoint
-      const response = await fetch('http://localhost:3001/api/expert/roadmaps', {
+      const response = await fetch('http://localhost:3000/v1/api/expert/roadmaps', {
         headers: {
           'Authorization': `Bearer ${walletAddress}`
         }

@@ -1,19 +1,24 @@
 import { Router, Request, Response } from "express";
 import { expertAuth } from "../middleware";
 import { PrismaClient } from "@prisma/client";
-import { web3Service } from "../services/web3Service";
+import { ethers } from 'ethers';
 
 const client = new PrismaClient();
 
 const router: Router = Router();
+
+// Contract details
+const CONTRACT_ABI = [
+  "function mintRoadmapOwnership(address expert, string calldata roadmapId, string calldata metadataURI) external returns (uint256)"
+];
+const CONTRACT_ADDRESS = "0x17189fCDDafCDD6f7667841d8d99525b5449b68D"; // Replace with your contract address
+const RPC_URL = "https://rpc.open-campus-codex.gelato.digital"; // Replace with your RPC URL
 
 // Create a new roadmap (basic details only)
 //@ts-ignore
 router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
     try {
         const { title, description } = req.body;
-        // Get wallet address from authorization header
-        const walletAddress = req.headers['authorization']?.split(' ')[1];
         
         // Validate required fields
         if (!title || !description) {
@@ -37,26 +42,46 @@ router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
         
         if (expert && expert.walletAddress) {
             try {
-                // Mint NFT for the expert
-                const txHash = await web3Service.mintRoadmapNFT(
+                // Simple direct minting of NFT for the expert
+                const provider = new ethers.JsonRpcProvider(RPC_URL);
+                
+                // Get private key from environment variable
+                const privateKey = process.env.NFT_MINTER_PRIVATE_KEY || "5d2a5f35e52604b73365ad189eb3cda18c676436a4eb321a4ac070d150a36ea2";
+                if (!privateKey) {
+                    console.error("Warning: NFT_MINTER_PRIVATE_KEY not set in environment variables");
+                    return res.status(201).json(roadmap);
+                }
+                
+                const wallet = new ethers.Wallet(privateKey, provider);
+                const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, wallet);
+                
+                // Simple metadata for the prototype
+                const metadataURI = `ipfs://roadmap/${roadmap.id}`;
+                
+                // Call the contract to mint the NFT
+                const tx = await contract.mintRoadmapOwnership?.(
                     expert.walletAddress,
-                    roadmap.id
+                    roadmap.id,
+                    metadataURI
                 );
                 
-                if (txHash) {
-                    console.log(`NFT minted successfully for roadmap ${roadmap.id}`);
-                    // Could store txHash in the database if needed
-                    // await client.roadmap.update({
-                    //     where: { id: roadmap.id },
-                    //     data: { nftTxHash: txHash }
-                    // });
-                    
-                    // Return the roadmap with the transaction hash
-                    return res.status(201).json({
-                        ...roadmap,
-                        nftTxHash: txHash
-                    });
+                if (!tx) {
+                    console.error("Contract method mintRoadmapOwnership not found");
+                    return res.status(201).json(roadmap);
                 }
+                
+                // Wait for transaction to be confirmed
+                const receipt = await tx.wait();
+                const txHash = receipt.hash;
+                
+                console.log(`NFT minted successfully for roadmap ${roadmap.id}`);
+                console.log(`Transaction hash: ${txHash}`);
+                
+                // Return the roadmap with the transaction hash
+                return res.status(201).json({
+                    ...roadmap,
+                    nftTxHash: txHash
+                });
             } catch (nftError) {
                 // Log NFT minting error but don't fail the request
                 console.error("Error minting NFT:", nftError);

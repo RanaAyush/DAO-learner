@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Appbar from '../components/Appbar';
 import { useRoadmap } from '../hooks';
+import { useAccount } from 'wagmi';
 
 // Resource types mapped to icons
 const ResourceTypeIcons: Record<string, React.ReactNode> = {
@@ -14,6 +15,7 @@ const ResourceTypeIcons: Record<string, React.ReactNode> = {
 };
 
 export default function RoadmapDetail() {
+  const { address } = useAccount();
   const { id } = useParams<{ id: string }>();
   const { roadmap, loading, error, addStep, addResource } = useRoadmap(id);
   
@@ -28,6 +30,22 @@ export default function RoadmapDetail() {
   });
   const [addingStep, setAddingStep] = useState(false);
   const [addingResource, setAddingResource] = useState(false);
+
+  const mintNFT = async () => {
+    console.log('Minting NFT');
+    try {
+      const response = await fetch(`http://localhost:3000/v1/api/expert/roadmap/:${id}/claim-certificate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${address}`
+        }
+      });
+      const data = await response.json();
+      console.log(data);
+    } catch (error) {
+      console.error('Error minting NFT:', error);
+    }
+  }
 
   const handleAddStep = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,6 +320,12 @@ export default function RoadmapDetail() {
                       Adding...
                     </>
                   ) : 'Add Step'}
+                </button>
+                <button onClick={() => mintNFT()}>
+                  <input type="checkbox" />
+                  <span>
+                    Mint NFT
+                  </span>
                 </button>
               </div>
             </form>
