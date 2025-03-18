@@ -46,7 +46,7 @@ router.post("/roadmap", expertAuth, async (req: Request, res: Response) => {
                 const provider = new ethers.JsonRpcProvider(RPC_URL);
                 
                 // Get private key from environment variable
-                const privateKey = process.env.NFT_MINTER_PRIVATE_KEY || "5d2a5f35e52604b73365ad189eb3cda18c676436a4eb321a4ac070d150a36ea2";
+                const privateKey = process.env.NFT_MINTER_PRIVATE_KEY || "";
                 if (!privateKey) {
                     console.error("Warning: NFT_MINTER_PRIVATE_KEY not set in environment variables");
                     return res.status(201).json(roadmap);

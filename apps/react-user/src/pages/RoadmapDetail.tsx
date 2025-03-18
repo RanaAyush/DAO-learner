@@ -15,56 +15,39 @@ const ResourceTypeIcons: Record<string, React.ReactNode> = {
 
 export default function RoadmapDetail() {
   const { id } = useParams<{ id: string }>();
-  const { roadmap, loading, error, addStep, addResource } = useRoadmap(id);
-  
-  const [showStepForm, setShowStepForm] = useState(false);
-  const [showResourceForm, setShowResourceForm] = useState<string | null>(null);
-  const [newStep, setNewStep] = useState({ title: '', description: '' });
-  const [newResource, setNewResource] = useState({
-    title: '',
-    description: '',
-    type: 'VIDEO' as 'VIDEO' | 'ARTICLE' | 'COURSE' | 'PROJECT' | 'DOCUMENTATION' | 'OTHER',
-    url: ''
-  });
-  const [addingStep, setAddingStep] = useState(false);
-  const [addingResource, setAddingResource] = useState(false);
+  const { roadmap, loading, error } = useRoadmap(id);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState<string | null>(null);
 
-  const handleAddStep = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAddingStep(true);
+  const handleClaimCertificate = async () => {
+    if (!id) return;
     
-    try {
-      await addStep(newStep.title, newStep.description);
-      setNewStep({ title: '', description: '' });
-      setShowStepForm(false);
-    } catch (error) {
-      console.error('Error adding step:', error);
-    } finally {
-      setAddingStep(false);
-    }
-  };
+    setClaiming(true);
+    setClaimError(null);
+    setClaimSuccess(null);
 
-  const handleAddResource = async (stepId: string) => {
-    setAddingResource(true);
-    
     try {
-      await addResource(stepId, {
-        title: newResource.title,
-        description: newResource.description,
-        type: newResource.type,
-        url: newResource.url
+      const response = await fetch(`http://localhost:3000/v1/api/learner/roadmap/${id}/claim-certificate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Get your auth token from wherever you store it
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
-      setNewResource({ 
-        title: '', 
-        description: '', 
-        type: 'VIDEO', 
-        url: '' 
-      });
-      setShowResourceForm(null);
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setClaimSuccess(`Certificate claimed successfully! Transaction: ${data.txHash}`);
+      } else {
+        setClaimError(data.error || 'Failed to claim certificate');
+      }
     } catch (error) {
-      console.error('Error adding resource:', error);
+      setClaimError('Failed to connect to server');
     } finally {
-      setAddingResource(false);
+      setClaiming(false);
     }
   };
 
@@ -101,12 +84,45 @@ export default function RoadmapDetail() {
       <Appbar />
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">{roadmap.title}</h1>
-          <p className="text-gray-600">{roadmap.description}</p>
-          <div className="mt-4 text-sm text-gray-500">
-            <p>Created: {new Date(roadmap.createdAt).toLocaleDateString()}</p>
-            <p>Enrollments: {roadmap._count.enrollments}</p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">{roadmap.title}</h1>
+              <p className="text-gray-600">{roadmap.description}</p>
+              <div className="mt-4 text-sm text-gray-500">
+                <p>Created: {new Date(roadmap.createdAt).toLocaleDateString()}</p>
+                <p>Enrollments: {roadmap._count.enrollments}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleClaimCertificate}
+              disabled={claiming}
+              className={`${
+                claiming ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
+              } text-white px-6 py-3 rounded-lg flex items-center gap-2`}
+            >
+              {claiming ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Claiming...
+                </>
+              ) : 'Mark as Complete & Claim Certificate'}
+            </button>
           </div>
+
+          {claimError && (
+            <div className="mt-4 p-4 bg-red-50 text-red-800 rounded-lg">
+              {claimError}
+            </div>
+          )}
+
+          {claimSuccess && (
+            <div className="mt-4 p-4 bg-green-50 text-green-800 rounded-lg">
+              {claimSuccess}
+            </div>
+          )}
         </div>
 
         <div className="space-y-8">
@@ -123,87 +139,10 @@ export default function RoadmapDetail() {
 
               {/* Resources */}
               <div className="mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-medium text-gray-900">Resources</h4>
-                  <button
-                    onClick={() => setShowResourceForm(step.id)}
-                    className="text-purple-600 hover:text-purple-700 flex items-center gap-2"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <path d="M12 8v8M8 12h8"></path>
-                    </svg>
-                    Add Resource
-                  </button>
-                </div>
-
-                {showResourceForm === step.id && (
-                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                    <div className="grid gap-4">
-                      <input
-                        type="text"
-                        placeholder="Resource Title"
-                        value={newResource.title}
-                        onChange={(e) => setNewResource({ ...newResource, title: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-md"
-                        disabled={addingResource}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Description"
-                        value={newResource.description}
-                        onChange={(e) => setNewResource({ ...newResource, description: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-md"
-                        disabled={addingResource}
-                      />
-                      <select
-                        value={newResource.type}
-                        onChange={(e) => setNewResource({ 
-                          ...newResource, 
-                          type: e.target.value as 'VIDEO' | 'ARTICLE' | 'COURSE' | 'PROJECT' | 'DOCUMENTATION' | 'OTHER'
-                        })}
-                        className="w-full px-3 py-2 border rounded-md"
-                        disabled={addingResource}
-                      >
-                        <option value="VIDEO">Video</option>
-                        <option value="ARTICLE">Article</option>
-                        <option value="COURSE">Course</option>
-                        <option value="PROJECT">Project</option>
-                        <option value="DOCUMENTATION">Documentation</option>
-                        <option value="OTHER">Other</option>
-                      </select>
-                      <input
-                        type="url"
-                        placeholder="URL"
-                        value={newResource.url}
-                        onChange={(e) => setNewResource({ ...newResource, url: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-md"
-                        disabled={addingResource}
-                      />
-                      <button
-                        onClick={() => handleAddResource(step.id)}
-                        className={`${
-                          addingResource ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
-                        } text-white px-4 py-2 rounded-md flex items-center justify-center gap-2`}
-                        disabled={addingResource}
-                      >
-                        {addingResource ? (
-                          <>
-                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Adding...
-                          </>
-                        ) : 'Add Resource'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
+                <h4 className="text-lg font-medium text-gray-900 mb-4">Resources</h4>
                 <div className="space-y-4">
                   {step.resources.length === 0 ? (
-                    <p className="text-gray-500 italic">No resources added yet</p>
+                    <p className="text-gray-500 italic">No resources available</p>
                   ) : (
                     step.resources.map((resource) => (
                       <div key={resource.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
@@ -230,83 +169,6 @@ export default function RoadmapDetail() {
             </div>
           ))}
         </div>
-
-        {/* Add Step Button */}
-        {!showStepForm && (
-          <button
-            onClick={() => setShowStepForm(true)}
-            className="mt-8 flex items-center gap-2 text-purple-600 hover:text-purple-700"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M12 8v8M8 12h8"></path>
-            </svg>
-            {roadmap.steps.length === 0 ? 'Add your first step' : 'Add another step'}
-          </button>
-        )}
-
-        {/* Step Form */}
-        {showStepForm && (
-          <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Add New Step</h3>
-            <form onSubmit={handleAddStep} className="space-y-4">
-              <div>
-                <label htmlFor="stepTitle" className="block text-sm font-medium text-gray-700 mb-2">
-                  Step Title
-                </label>
-                <input
-                  id="stepTitle"
-                  type="text"
-                  value={newStep.title}
-                  onChange={(e) => setNewStep({ ...newStep, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  required
-                  disabled={addingStep}
-                />
-              </div>
-              <div>
-                <label htmlFor="stepDescription" className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  id="stepDescription"
-                  value={newStep.description}
-                  onChange={(e) => setNewStep({ ...newStep, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md h-32"
-                  required
-                  disabled={addingStep}
-                />
-              </div>
-              <div className="flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => setShowStepForm(false)}
-                  className="text-gray-600 hover:text-gray-800"
-                  disabled={addingStep}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`${
-                    addingStep ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
-                  } text-white px-4 py-2 rounded-lg flex items-center gap-2`}
-                  disabled={addingStep}
-                >
-                  {addingStep ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Adding...
-                    </>
-                  ) : 'Add Step'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
       </div>
     </div>
   );
